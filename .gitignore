@@ -1,0 +1,12 @@
+*.o
+*.hex
+*.lss
+*.map
+*.epp
+*.mk
+*.dat
+*.elf
+*.bin
+*~
+.dep/
+
