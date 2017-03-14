@@ -62,17 +62,19 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
-#define CURSOR_STEP     5
 
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
-USBD_HandleTypeDef USBD_Device;
+ADC_HandleTypeDef    AdcHandle;
+__IO uint16_t   aADCxConvertedValues[10];
 
-uint8_t USBSendBuffer[32+1] = {1, 0};			//1 report id, 8 bytes buttons, 12 bytes for 6 axes
+USBD_HandleTypeDef USBD_Device;
+uint8_t USBSendBuffer[4 + 1] = {1, 0};			//1 report id, 8 bytes buttons, 12 bytes for 6 axes
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void Error_Handler(void);
+static void ADC_Config(void);
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -91,12 +93,12 @@ int main(void)
 
   /* Init Device Library */
   USBD_Init(&USBD_Device, &HID_Desc, 0);
-
   USBD_RegisterClass(&USBD_Device, &USBD_CUSTOM_HID);
-
   USBD_CUSTOM_HID_RegisterInterface(&USBD_Device, &USBD_CustomHID_fops_FS);
-
   USBD_Start(&USBD_Device);
+
+  ADC_Config();
+  HAL_ADCEx_Calibration_Start(&AdcHandle);
 
   USBSendBuffer[1] = 0xff;
   USBSendBuffer[2] = 0;
@@ -107,6 +109,7 @@ int main(void)
 
   while (1)
   {
+#if 0
     uint32_t new_time = HAL_GetTick();
     if ((new_time - old_time) > 1000) {
       if (flag) {
@@ -127,8 +130,12 @@ int main(void)
       old_time = new_time;
       USBD_CUSTOM_HID_SendReport(&USBD_Device, USBSendBuffer, 5);
     }
-
-    //HAL_Delay(200);
+#endif
+    HAL_ADC_Start_DMA(&AdcHandle, (uint32_t *)aADCxConvertedValues, 1);
+    HAL_Delay(50);
+    USBSendBuffer[3] = *((uint8_t *)aADCxConvertedValues + 1);
+    USBSendBuffer[4] = *((uint8_t *)aADCxConvertedValues);
+    USBD_CUSTOM_HID_SendReport(&USBD_Device, USBSendBuffer, 5);
   }
 }
 
@@ -222,6 +229,46 @@ void assert_failed(uint8_t* file, uint32_t line)
 }
 
 #endif
+
+
+static void ADC_Config(void)
+{
+  ADC_ChannelConfTypeDef   sConfig;
+
+  AdcHandle.Instance = ADC1;
+
+  AdcHandle.Init.DataAlign             = ADC_DATAALIGN_RIGHT;
+  AdcHandle.Init.ScanConvMode          = ADC_SCAN_DISABLE;              /* Sequencer disabled (ADC conversion on only 1 channel: channel set on rank 1) */
+
+  AdcHandle.Init.ContinuousConvMode    = ENABLE;                        /* Continuous mode to have maximum conversion speed (no delay between conversions) */
+  AdcHandle.Init.NbrOfConversion       = 1;                             /* Parameter discarded because sequencer is disabled */
+  AdcHandle.Init.DiscontinuousConvMode = DISABLE;                       /* Parameter discarded because sequencer is disabled */
+  AdcHandle.Init.NbrOfDiscConversion   = 1;                             /* Parameter discarded because sequencer is disabled */
+  AdcHandle.Init.ExternalTrigConv      = ADC_SOFTWARE_START;            /* Software start to trig the 1st conversion manually, without external event */
+
+  HAL_ADC_Init(&AdcHandle);
+
+  sConfig.Channel      = /*ADC_CHANNEL_9*/ADC_CHANNEL_TEMPSENSOR;
+  sConfig.Rank         = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_41CYCLES_5;
+
+  HAL_ADC_ConfigChannel(&AdcHandle, &sConfig);
+
+ // sConfig.Channel      = ADC_CHANNEL_TEMPSENSOR;
+
+  //HAL_ADC_ConfigChannel(&AdcHandle, &sConfig);
+
+#if 0
+  GPIO_InitTypeDef GPIO_InitStruct;
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  GPIO_InitStruct.Pin = GPIO_PIN_1;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+#endif
+}
 
 /**
   * @}
