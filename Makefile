@@ -61,10 +61,12 @@ C_SOURCES += stm32f1xx_it.c
 C_SOURCES += STM32_USB_Device_Library/Core/Src/usbd_core.c
 C_SOURCES += STM32_USB_Device_Library/Core/Src/usbd_ctlreq.c
 C_SOURCES += STM32_USB_Device_Library/Core/Src/usbd_ioreq.c
-C_SOURCES += STM32_USB_Device_Library/Class/HID/Src/usbd_hid.c
+C_SOURCES += STM32_USB_Device_Library/Class/CustomHID/Src/usbd_customhid.c
+
 
 C_SOURCES += usbd_conf.c
 C_SOURCES += usbd_desc.c
+C_SOURCES += usbd_custom_hid_if.c
 
 C_SOURCES += main.c
 
@@ -90,7 +92,7 @@ AS_DEFS =
 C_DEFS = -DSTM32F103x6
 # includes for gcc
 AS_INCLUDES = 
-C_INCLUDES = -I . -I hal -I hal/Inc -I CMSIS/Include -I CMSIS/Device/ST/STM32F1xx/Include -I STM32_USB_Device_Library/Class/HID/Inc
+C_INCLUDES = -I . -I hal -I hal/Inc -I CMSIS/Include -I CMSIS/Device/ST/STM32F1xx/Include -I STM32_USB_Device_Library/Class/CustomHID/Inc
 
 #for usb
 C_INCLUDES += -I STM32_USB_Device_Library/Core/Inc

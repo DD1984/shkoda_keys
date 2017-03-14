@@ -8,7 +8,7 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright � 2016 STMicroelectronics International N.V. 
+  * <h2><center>&copy; Copyright ��� 2016 STMicroelectronics International N.V.
   * All rights reserved.</center></h2>
   *
   * Redistribution and use in source and binary forms, with or without 
@@ -49,7 +49,8 @@
 #include "stm32f1xx_hal.h"
 #include "usbd_core.h"
 #include "usbd_desc.h"
-#include "usbd_hid.h"
+#include "usbd_customhid.h"
+#include "usbd_custom_hid_if.h"
 
 /** @addtogroup STM32F1xx_HAL_Validation
   * @{
@@ -66,12 +67,12 @@
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 USBD_HandleTypeDef USBD_Device;
-uint8_t HID_Buffer[4];
+
+uint8_t USBSendBuffer[32+1] = {1, 0};			//1 report id, 8 bytes buttons, 12 bytes for 6 axes
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void Error_Handler(void);
-static void GetPointerData(uint8_t *pbuf);
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -88,31 +89,46 @@ int main(void)
   /* Configure the system clock to 72 MHz */
   SystemClock_Config();
 
-#if 0
-  /* Initialize LED2 */
-  BSP_LED_Init(LED2);
-  
-  /* Configure Key button for remote wakeup */
-  BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
-#endif
-
   /* Init Device Library */
   USBD_Init(&USBD_Device, &HID_Desc, 0);
 
-  /* Register the HID class */
-  USBD_RegisterClass(&USBD_Device, USBD_HID_CLASS);
+  USBD_RegisterClass(&USBD_Device, &USBD_CUSTOM_HID);
 
-  /* Start Device Process */
+  USBD_CUSTOM_HID_RegisterInterface(&USBD_Device, &USBD_CustomHID_fops_FS);
+
   USBD_Start(&USBD_Device);
+
+  USBSendBuffer[1] = 0xff;
+  USBSendBuffer[2] = 0;
+  uint32_t flag = 1;
+
+
+  uint32_t old_time = HAL_GetTick();
 
   while (1)
   {
-    /* Insert delay 100 ms */
-    HAL_Delay(100);  
-    //BSP_LED_Toggle(LED2);
-    HAL_Delay(100);  
-    GetPointerData(HID_Buffer);
-    USBD_HID_SendReport(&USBD_Device, HID_Buffer, 4);
+    uint32_t new_time = HAL_GetTick();
+    if ((new_time - old_time) > 1000) {
+      if (flag) {
+        flag = 0;
+        USBSendBuffer[1] = 0;
+        USBSendBuffer[2] = 0xff;
+        USBSendBuffer[3] = 0xff;
+        USBSendBuffer[4] = 0x0f;
+      }
+      else {
+        flag = 1;
+        USBSendBuffer[1] = 0xff;
+        USBSendBuffer[2] = 0;
+        USBSendBuffer[3] = 0;
+        USBSendBuffer[4] = 0;
+      }
+
+      old_time = new_time;
+      USBD_CUSTOM_HID_SendReport(&USBD_Device, USBSendBuffer, 5);
+    }
+
+    //HAL_Delay(200);
   }
 }
 
@@ -179,36 +195,11 @@ void SystemClock_Config(void)
   */
 static void Error_Handler(void)
 {
-  //BSP_LED_On(LED2);
   while (1)
   {
   }
 }
 
-/**
-  * @brief  Gets Pointer Data.
-  * @param  pbuf: Pointer to report
-  * @retval None
-  */
-static void GetPointerData(uint8_t *pbuf)
-{
-  static int8_t cnt = 0;
-  int8_t  x = 0, y = 0 ;
-  
-  if(cnt++ > 0)
-  {
-    x = CURSOR_STEP;
-  }
-  else
-  {
-    x = -CURSOR_STEP;
-  }
-  
-  pbuf[0] = 0;
-  pbuf[1] = x;
-  pbuf[2] = y;
-  pbuf[3] = 0;
-}
 
 #ifdef  USE_FULL_ASSERT
 
