@@ -56,7 +56,7 @@ C_SOURCES += hal/Src/stm32f1xx_hal_pcd_ex.c
 
 C_SOURCES += hal/stm32f1xx_hal_msp.c
 C_SOURCES += stm32f1xx_it.c
-#C_SOURCES += src/hal/syscalls.c
+C_SOURCES += syscalls.c
 
 C_SOURCES += STM32_USB_Device_Library/Core/Src/usbd_core.c
 C_SOURCES += STM32_USB_Device_Library/Core/Src/usbd_ctlreq.c
