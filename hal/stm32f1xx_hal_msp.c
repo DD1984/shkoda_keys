@@ -83,6 +83,17 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef *hadc)
 
 	/* Associate the initialized DMA handle to the ADC handle */
 	__HAL_LINKDMA(hadc, DMA_Handle, DmaHandle);
+
+	/* NVIC configuration for DMA interrupt (transfer completion or error) */
+	/* Priority: high-priority */
+	HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 1, 0);
+	HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+
+
+	  /* NVIC configuration for ADC interrupt */
+	  /* Priority: high-priority */
+	HAL_NVIC_SetPriority(ADC1_2_IRQn, 0, 0);
+	HAL_NVIC_EnableIRQ(ADC1_2_IRQn);
 }
 
 void HAL_ADC_MspDeInit(ADC_HandleTypeDef *hadc)
@@ -95,6 +106,11 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef *hadc)
 	{
 		HAL_DMA_DeInit(hadc->DMA_Handle);
 	}
+	/* Disable the NVIC configuration for DMA interrupt */
+	HAL_NVIC_DisableIRQ(DMA1_Channel1_IRQn);
+
+	/* Disable the NVIC configuration for ADC interrupt */
+	HAL_NVIC_DisableIRQ(ADC1_2_IRQn);
 }
 
 /**
@@ -109,7 +125,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
 {
 	GPIO_InitTypeDef  GPIO_InitStruct;
 
-	__HAL_RCC_GPIOB_CLK_ENABLE();
+	__HAL_RCC_GPIOA_CLK_ENABLE();
 
 
 	__HAL_RCC_USART1_CLK_ENABLE();

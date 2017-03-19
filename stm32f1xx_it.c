@@ -203,6 +203,28 @@ void EXTI15_10_IRQHandler(void)
 {
 }
 
+/**
+  * @brief  This function handles ADC interrupt request.
+  * @param  None
+  * @retval None
+  */
+extern ADC_HandleTypeDef    AdcHandle;
+void ADC1_2_IRQHandler(void)
+{
+  HAL_ADC_IRQHandler(&AdcHandle);
+}
+
+/**
+* @brief  This function handles DMA interrupt request.
+* @param  None
+* @retval None
+*/
+void DMA1_Channel1_IRQHandler(void)
+{
+	HAL_DMA_IRQHandler(AdcHandle.DMA_Handle);
+}
+
+
 
 /**
   * @}

@@ -45,119 +45,92 @@
   ******************************************************************************
   */
 
-/* Includes ------------------------------------------------------------------*/
 #include "stm32f1xx_hal.h"
 #include "usbd_core.h"
 #include "usbd_desc.h"
 #include "usbd_customhid.h"
 #include "usbd_custom_hid_if.h"
 
-/** @addtogroup STM32F1xx_HAL_Validation
-  * @{
-  */
+#define BTNS_NUM	24
+#define AXES_NUM	1
 
-/** @addtogroup STANDARD_CHECK
-  * @{
-  */ 
+#define BTNS_OFFSET	1
+#define AXES_OFFSET (BTNS_OFFSET + BTNS_NUM / 8)
 
-/* Private typedef -----------------------------------------------------------*/
-/* Private define ------------------------------------------------------------*/
+#define BTN_TH		100
+#define UART_BAUDRATE 115200
 
-/* Private macro -------------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef    AdcHandle;
-__IO uint16_t   aADCxConvertedValues[8];
+#define ADC_CH_MAX 10
+#define MAX_ANALOG_BTN_FOR_ADC_CH 10
 
-UART_HandleTypeDef Uart;
-USBD_HandleTypeDef USBD_Device;
-uint8_t USBSendBuffer[4 + 1] = {1, 0};			//1 report id, 8 bytes buttons, 12 bytes for 6 axes
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
-/* Private function prototypes -----------------------------------------------*/
+__IO uint16_t adc_dma_buf[ADC_CH_MAX];
+uint16_t adc_vals[ADC_CH_MAX];
+uint8_t usb_buf[1 + BTNS_NUM / 8 + 2 * AXES_NUM] = {1, 0};	//1 report id, 1bit - button, 2 bytes - axe
+
+ADC_HandleTypeDef	AdcHandle;
+UART_HandleTypeDef	Uart;
+USBD_HandleTypeDef	USBD_Device;
+
 void SystemClock_Config(void);
 static void Error_Handler(void);
-static void ADC_Config(void);
+void UART_Config(void);
+void ADC_Config(void);
+void ADC_Start(void);
+void USB_Config(void);
+void fill_usb_buf(void);
+void usb_send_msg(void);
 
-/* Private functions ---------------------------------------------------------*/
 
-/**
-  * @brief  Main program.
-  * @param  None
-  * @retval None
-  */
+volatile uint32_t adc_end = 1;
+
+typedef struct {
+	int32_t n[MAX_ANALOG_BTN_FOR_ADC_CH];
+} ch_t;
+
+ch_t analog_btns[] = {
+	//правая
+	{2760, 3560 ,-1},	//поворотники					A0 - первый после желтого
+	{4095, -1},			//дальний включить
+	{4095, -1},			//дальний мигнуть
+	{3570, 2800 ,-1},	//кнопки вверх/низ				A1 - зеленый
+	{2760, 3560, -1},	//полукруглый переключатель		A2 - красный
+	{2535, 3165, 3610, 3895, -1},
+	{3825, 3360, 2665, -1},
+	{3825, 2670, 3370, -1}
+};
+
 int main(void)
 {
 	HAL_Init();
 	SystemClock_Config();
 
-	Uart.Instance        = USART1;
+	UART_Config();
 
-	Uart.Init.BaudRate   = 115200;
-	Uart.Init.WordLength = UART_WORDLENGTH_8B;
-	Uart.Init.StopBits   = UART_STOPBITS_1;
-	Uart.Init.Parity     = UART_PARITY_NONE;
-	Uart.Init.HwFlowCtl  = UART_HWCONTROL_NONE;
-	Uart.Init.Mode       = UART_MODE_TX_RX;
+	printf("\nHello world\n");
 
-	HAL_UART_Init(&Uart);
-	setvbuf(stdin, NULL, _IONBF, 0);
-	setvbuf(stdout, NULL, _IONBF, 0);
-	setvbuf(stderr, NULL, _IONBF, 0);
-
-	printf("Hello world\n");
-
-	USBD_Init(&USBD_Device, &HID_Desc, 0);
-	USBD_RegisterClass(&USBD_Device, &USBD_CUSTOM_HID);
-	USBD_CUSTOM_HID_RegisterInterface(&USBD_Device, &USBD_CustomHID_fops_FS);
-	USBD_Start(&USBD_Device);
+	USB_Config();
 
 	ADC_Config();
-	HAL_ADCEx_Calibration_Start(&AdcHandle);
-
-	USBSendBuffer[1] = 0xff;
-	USBSendBuffer[2] = 0;
-	uint32_t flag = 1;
-
+	ADC_Start();
 
 	uint32_t old_time = HAL_GetTick();
 
-	while (1)
-	{
-#if 0
+	while (1) {
 		uint32_t new_time = HAL_GetTick();
-		if ((new_time - old_time) > 1000) {
-			if (flag) {
-				flag = 0;
-				USBSendBuffer[1] = 0;
-				USBSendBuffer[2] = 0xff;
-				USBSendBuffer[3] = 0xff;
-				USBSendBuffer[4] = 0x0f;
-			}
-			else {
-				flag = 1;
-				USBSendBuffer[1] = 0xff;
-				USBSendBuffer[2] = 0;
-				USBSendBuffer[3] = 0;
-				USBSendBuffer[4] = 0;
-			}
 
-			old_time = new_time;
-			USBD_CUSTOM_HID_SendReport(&USBD_Device, USBSendBuffer, 5);
-		}
+		if (adc_end && (new_time - old_time) > 50) {
+#if 0
+			uint32_t i;
+			for (i = 0; i < ADC_CH_MAX; i++)
+				printf("[%d.%4d]", i, adc_vals[i]);
+			printf("\n");
 #endif
-		HAL_ADC_Start_DMA(&AdcHandle, (uint32_t *)aADCxConvertedValues, 8);
-		HAL_Delay(10);
-
-		//uint32_t i;
-		//for (i = 0; i < 8; i++)
-		//	printf("[%d]-%4d, ", i, aADCxConvertedValues[i]);
-		//printf("\n");
-
-		USBSendBuffer[3] = *((uint8_t *)aADCxConvertedValues) & 0xff;
-		USBSendBuffer[4] = *((uint8_t *)aADCxConvertedValues + 1) & 0xff;
-
-		printf("%d %d %d\n", USBSendBuffer[3], USBSendBuffer[4], aADCxConvertedValues[0]);
-
-		USBD_CUSTOM_HID_SendReport(&USBD_Device, USBSendBuffer, 5);
+			old_time = new_time;
+			adc_end = 0;
+			usb_send_msg();
+		}
 	}
 }
 
@@ -224,9 +197,8 @@ void SystemClock_Config(void)
   */
 static void Error_Handler(void)
 {
-  while (1)
-  {
-  }
+	while (1) {
+	}
 }
 
 
@@ -252,8 +224,7 @@ void assert_failed(uint8_t* file, uint32_t line)
 
 #endif
 
-
-static void ADC_Config(void)
+void ADC_Config(void)
 {
 	ADC_ChannelConfTypeDef   sConfig;
 
@@ -263,9 +234,9 @@ static void ADC_Config(void)
 	AdcHandle.Init.ScanConvMode          = ADC_SCAN_ENABLE;
 
 	AdcHandle.Init.ContinuousConvMode    = ENABLE;                        /* Continuous mode to have maximum conversion speed (no delay between conversions) */
-	AdcHandle.Init.NbrOfConversion       = 8;
-	AdcHandle.Init.DiscontinuousConvMode = ENABLE;
-	AdcHandle.Init.NbrOfDiscConversion   = 1;
+	AdcHandle.Init.NbrOfConversion       = ADC_CH_MAX;
+	AdcHandle.Init.DiscontinuousConvMode = DISABLE;
+	AdcHandle.Init.NbrOfDiscConversion   = 0;
 	AdcHandle.Init.ExternalTrigConv      = ADC_SOFTWARE_START;            /* Software start to trig the 1st conversion manually, without external event */
 
 	HAL_ADC_Init(&AdcHandle);
@@ -304,23 +275,168 @@ static void ADC_Config(void)
 	sConfig.Rank         = ADC_REGULAR_RANK_8;
 	HAL_ADC_ConfigChannel(&AdcHandle, &sConfig);
 
+	sConfig.Channel      = ADC_CHANNEL_8;
+	sConfig.Rank         = ADC_REGULAR_RANK_9;
+	HAL_ADC_ConfigChannel(&AdcHandle, &sConfig);
+
+	sConfig.Channel      = ADC_CHANNEL_9;
+	sConfig.Rank         = ADC_REGULAR_RANK_10;
+	HAL_ADC_ConfigChannel(&AdcHandle, &sConfig);
 
 	GPIO_InitTypeDef GPIO_InitStruct;
 	__HAL_RCC_GPIOA_CLK_ENABLE();
 	__HAL_RCC_GPIOB_CLK_ENABLE();
 
-	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7;
 	GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
+
+	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7;
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	HAL_ADCEx_Calibration_Start(&AdcHandle);
+
+	GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1;
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+	HAL_ADCEx_Calibration_Start(&AdcHandle);
+
 }
 
-/**
-  * @}
-  */
+void ADC_Start(void)
+{
+	HAL_ADC_Start_DMA(&AdcHandle, adc_dma_buf, ADC_CH_MAX);
+}
 
-/**
-  * @}
-  */
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
+{
+	memcpy(adc_vals, adc_dma_buf, (ADC_CH_MAX / 2) * sizeof(adc_dma_buf[0]));
+}
 
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+	memcpy(&adc_vals[ADC_CH_MAX / 2], &adc_dma_buf[ADC_CH_MAX / 2], (ADC_CH_MAX / 2) * sizeof(adc_dma_buf[0]));
+	adc_end = 1;
+}
+
+void UART_Config(void)
+{
+	Uart.Instance        = USART1;
+
+	Uart.Init.BaudRate   = UART_BAUDRATE;
+	Uart.Init.WordLength = UART_WORDLENGTH_8B;
+	Uart.Init.StopBits   = UART_STOPBITS_1;
+	Uart.Init.Parity     = UART_PARITY_NONE;
+	Uart.Init.HwFlowCtl  = UART_HWCONTROL_NONE;
+	Uart.Init.Mode       = UART_MODE_TX_RX;
+
+	HAL_UART_Init(&Uart);
+	setvbuf(stdin, NULL, _IONBF, 0);
+	setvbuf(stdout, NULL, _IONBF, 0);
+	setvbuf(stderr, NULL, _IONBF, 0);
+}
+
+void USB_Config(void)
+{
+	USBD_Init(&USBD_Device, &HID_Desc, 0);
+	USBD_RegisterClass(&USBD_Device, &USBD_CUSTOM_HID);
+	USBD_CUSTOM_HID_RegisterInterface(&USBD_Device, &USBD_CustomHID_fops_FS);
+	USBD_Start(&USBD_Device);
+}
+
+int32_t check_analog_btn(uint32_t num)
+{
+	uint32_t btn_num = 0;
+	uint32_t i;
+	for (i = 0; i < ARRAY_SIZE(analog_btns); i++) {
+		uint32_t j = 0;
+		while (analog_btns[i].n[j] != -1) {
+			if (num == btn_num) {
+				int32_t min = analog_btns[i].n[j] - BTN_TH;
+				if (min < 0)
+					min = 0;
+				int32_t max = analog_btns[i].n[j] + BTN_TH;
+				if (max > 4095)
+					max = 4095;
+				if (min <= adc_vals[i] && max >= adc_vals[i]) {
+					return 1;
+				}
+				else {
+					return 0;
+				}
+			}
+			j++;
+			btn_num++;
+		}
+	}
+	return -1;
+}
+
+uint32_t get_btn(uint32_t num)
+{
+	int32_t val = check_analog_btn(num);
+	if (val == -1)
+		val = 0;
+	return val;
+}
+
+uint32_t get_axis(uint32_t num)
+{
+	uint16_t arr[] = {2335, 3160, 3605, 3890};
+	uint32_t i;
+	for (i = 0; i < ARRAY_SIZE(arr); i++) {
+		int32_t min = arr[i] - BTN_TH;
+		if (min < 0)
+			min = 0;
+		int32_t max = arr[i] + BTN_TH;
+		if (max > 4095)
+			max = 4095;
+		if (min <= adc_vals[8] && max >= adc_vals[8]) {
+			break;
+		}
+	}
+
+	switch (i) {
+	default:
+	case 0:
+		return 0;
+	case 1:
+		return 1024;
+	case 2:
+		return 2048;
+	case 3:
+		return 4095;
+	}
+
+	return 0;
+}
+
+void fill_usb_buf(void)
+{
+	uint32_t i;
+	for (i = 0; i < AXES_NUM; i++) {
+		uint32_t val = get_axis(i);
+		usb_buf[AXES_OFFSET + i * 2] = val & 0xff;
+		usb_buf[AXES_OFFSET + i * 2 + 1] = (val >> 8) & 0x0f;
+		//printf("usb_buf[%d] == %d, usb_buf[%d] == %d\n", AXES_OFFSET + i * 2, usb_buf[AXES_OFFSET + i * 2], AXES_OFFSET + i * 2 + 1, usb_buf[AXES_OFFSET + i * 2 + 1]);
+	}
+
+	for (i = 0; i < BTNS_NUM; i++) {
+		uint32_t val = get_btn(i);
+
+		if (val) {
+			usb_buf[BTNS_OFFSET + i / 8] |= 1 << (i % 8);
+			//printf("1");
+		}
+		else {
+			usb_buf[BTNS_OFFSET + i / 8] &= ~(1 << (i % 8));
+			//printf("0");
+		}
+	}
+	//printf(" 0x%x 0x%x\n", usb_buf[1], usb_buf[2]);
+	//printf("\n");
+}
+
+void usb_send_msg(void)
+{
+	fill_usb_buf();
+	USBD_CUSTOM_HID_SendReport(&USBD_Device, usb_buf, sizeof(usb_buf));
+}
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
