@@ -68,6 +68,10 @@ C_SOURCES += usbd_conf.c
 C_SOURCES += usbd_desc.c
 C_SOURCES += usbd_custom_hid_if.c
 
+C_SOURCES += adc.c
+C_SOURCES += system.c
+C_SOURCES += uart.c
+C_SOURCES += usb.c
 C_SOURCES += main.c
 
 #asm
