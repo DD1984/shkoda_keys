@@ -44,6 +44,10 @@
   *
   ******************************************************************************
   */
+//#undef VECT_TAB_OFFSET
+//#define VECT_TAB_OFFSET  0x2000 
+
+#include <string.h>
 
 #include "stm32f1xx_hal.h"
 
@@ -51,7 +55,7 @@
 #include "adc.h"
 #include "uart.h"
 
-//#define DEBUG_PRINT
+#define DEBUG_PRINT
 
 #define USB_SEND_PERIOD 10 //mSec
 
@@ -68,6 +72,7 @@
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
 uint8_t usb_buf[1 + BTNS_NUM / 8 + 2 * AXES_NUM] = {1, 0};	//1 report id, 1bit - button, 2 bytes - axe
+uint8_t tmp_usb_buf[1 + BTNS_NUM / 8 + 2 * AXES_NUM] = {1, 0};
 
 void fill_usb_buf(uint8_t *buf);
 
@@ -90,25 +95,56 @@ ch_t analog_btns[] = {
 
 int main(void)
 {
+	SCB->VTOR = FLASH_BASE | 0x2000; //vector table
+
 	HAL_Init();
+
 	SystemClock_Config();
 
 	UART_Config();
 
 	printf("\nHello world\n");
 
+	//disconnect usb
+	GPIO_InitTypeDef  GPIO_InitStruct;
+
+	__HAL_RCC_GPIOA_CLK_ENABLE();
+
+	GPIO_InitStruct.Pin = (GPIO_PIN_12);
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_RESET);
+
+	HAL_Delay(50);
+
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_SET);
+
+	HAL_GPIO_DeInit(GPIOC, GPIO_PIN_12);
+	//
+
 	USB_Config();
+
+	printf("USB config done\n");
 
 	ADC_Config();
 	ADC_Start();
 
+	printf("ADC config done\n");
+
 	uint32_t old_time = HAL_GetTick();
+
+	printf("start loop\n");
 
 	while (1) {
 		uint32_t new_time = HAL_GetTick();
 
 		if (adc_complete && (new_time - old_time) > USB_SEND_PERIOD) {
-#ifdef DEBUG_PRINT
+#if 0 //def DEBUG_PRINT
 			uint32_t i;
 			for (i = 0; i < ADC_CH_MAX; i++)
 				printf("[%d.%4d]", i, adc_vals[i]);
@@ -117,8 +153,13 @@ int main(void)
 			old_time = new_time;
 			adc_complete = 0;
 
-			fill_usb_buf(usb_buf);
-			usb_send_msg(usb_buf, sizeof(usb_buf));
+			fill_usb_buf(tmp_usb_buf);
+
+			if (memcmp(tmp_usb_buf, usb_buf, sizeof(usb_buf)) != 0) {
+				memcpy(usb_buf, tmp_usb_buf, sizeof(usb_buf));
+				usb_send_msg(usb_buf, sizeof(usb_buf));
+				printf("send usb msg\n");
+			}
 		}
 	}
 }

@@ -1,0 +1,1 @@
+st-flash  write generic_boot20_pc13.bin 0x08000000
