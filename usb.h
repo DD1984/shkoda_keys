@@ -4,6 +4,6 @@
 extern USBD_HandleTypeDef	USBD_Device;
 
 void USB_Config(void);
-void usb_send_msg(uint8_t *buf, uint32_t len);
+int usb_send_msg(uint8_t *buf, uint32_t len);
 
 #endif

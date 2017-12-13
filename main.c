@@ -71,8 +71,9 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
-uint8_t usb_buf[1 + BTNS_NUM / 8 + 2 * AXES_NUM] = {1, 0};	//1 report id, 1bit - button, 2 bytes - axe
-uint8_t tmp_usb_buf[1 + BTNS_NUM / 8 + 2 * AXES_NUM] = {1, 0};
+#define USB_BUF_SIZE (1 + BTNS_NUM / 8 + 2 * AXES_NUM) //1 report id, 1bit - button, 2 bytes - axe
+uint8_t usb_buf[USB_BUF_SIZE];
+uint8_t tmp_usb_buf[USB_BUF_SIZE];
 
 void fill_usb_buf(uint8_t *buf);
 
@@ -155,12 +156,14 @@ int main(void)
 			old_time = new_time;
 			adc_complete = 0;
 
-			fill_usb_buf(tmp_usb_buf);
+			fill_usb_buf(usb_buf);
 
-			if (memcmp(tmp_usb_buf, usb_buf, sizeof(usb_buf)) != 0) {
-				memcpy(usb_buf, tmp_usb_buf, sizeof(usb_buf));
-				usb_send_msg(usb_buf, sizeof(usb_buf));
-				printf("send usb msg\n");
+			if (memcmp(usb_buf, tmp_usb_buf, sizeof(usb_buf)) != 0) {
+
+				if (usb_send_msg(usb_buf, sizeof(usb_buf)) == 0) {
+					printf("send usb msg\n");
+					memcpy(tmp_usb_buf, usb_buf, sizeof(usb_buf));
+				}
 			}
 		}
 	}
@@ -236,6 +239,9 @@ uint32_t get_axis(uint32_t num)
 void fill_usb_buf(uint8_t *buf)
 {
 	uint32_t i;
+
+	buf[0] = 1; //report id
+
 	for (i = 0; i < AXES_NUM; i++) {
 		uint32_t val = get_axis(i);
 		buf[AXES_OFFSET + i * 2] = val & 0xff;
