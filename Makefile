@@ -72,6 +72,7 @@ C_SOURCES += adc.c
 C_SOURCES += system.c
 C_SOURCES += uart.c
 C_SOURCES += usb.c
+C_SOURCES += dig_btns.c
 C_SOURCES += main.c
 
 #asm

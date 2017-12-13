@@ -23,3 +23,25 @@ int usb_send_msg(uint8_t *buf, uint32_t len)
 	USBD_CUSTOM_HID_SendReport(&USBD_Device, buf, len);
 	return 0;
 }
+
+void disconnect_usb(void)
+{
+	//disconnect usb
+	GPIO_InitTypeDef  GPIO_InitStruct;
+
+	GPIO_InitStruct.Pin = GPIO_PIN_12;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_RESET);
+
+	HAL_Delay(50);
+
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_SET);
+
+	HAL_GPIO_DeInit(GPIOC, GPIO_PIN_12);
+}

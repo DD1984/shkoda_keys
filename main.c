@@ -44,22 +44,23 @@
   *
   ******************************************************************************
   */
-//#undef VECT_TAB_OFFSET
-//#define VECT_TAB_OFFSET  0x2000 
 
 #include <string.h>
 
 #include "stm32f1xx_hal.h"
 
+#include "defs.h"
 #include "system.h"
 #include "adc.h"
 #include "uart.h"
+#include "usb.h"
+#include "dig_btns.h"
 
 #define DEBUG_PRINT
 
 #define USB_SEND_PERIOD 10 //mSec
 
-#define BTNS_NUM	24
+#define BTNS_NUM	32
 #define AXES_NUM	1
 
 #define BTNS_OFFSET	1
@@ -68,8 +69,6 @@
 #define BTN_THRESHOLD	100 // btn +-
 
 #define MAX_ANALOG_BTN_FOR_ADC_CH 10
-
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
 #define USB_BUF_SIZE (1 + BTNS_NUM / 8 + 2 * AXES_NUM) //1 report id, 1bit - button, 2 bytes - axe
 uint8_t usb_buf[USB_BUF_SIZE];
@@ -82,7 +81,7 @@ typedef struct {
 } ch_t;
 
 // 4.7к на землю
-ch_t analog_btns[] = {
+ch_t analog_btns[] = { //num == 18
 	//правый, желтый - 3.3в
 	{2760, 3560 ,-1},	//поворотники					- красный нижний
 	{4095, -1},			//дальний включить - зеленый нижний
@@ -96,6 +95,33 @@ ch_t analog_btns[] = {
 	//черный ось - а7
 };
 
+
+uint32_t led_on_time = 0;
+
+int init_led(void)
+{
+	GPIO_InitTypeDef  GPIO_InitStruct;
+
+	GPIO_InitStruct.Pin = GPIO_PIN_13;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
+	HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+}
+
+void led_on(void) {
+	led_on_time = HAL_GetTick();
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+}
+
+void led_check_off(void)
+{
+	uint32_t new_time = HAL_GetTick();
+	if (new_time - led_on_time > 50)
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+}
+
 int main(void)
 {
 	SCB->VTOR = FLASH_BASE | 0x2000; //vector table
@@ -104,57 +130,43 @@ int main(void)
 
 	SystemClock_Config();
 
-	UART_Config();
+	//тактирование портов
+	__HAL_RCC_GPIOA_CLK_ENABLE();
+	__HAL_RCC_GPIOB_CLK_ENABLE();
 
+	UART_Config();
 	printf("\nHello world\n");
 
-	//disconnect usb
-	GPIO_InitTypeDef  GPIO_InitStruct;
-
-	__HAL_RCC_GPIOA_CLK_ENABLE();
-
-	GPIO_InitStruct.Pin = (GPIO_PIN_12);
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_RESET);
-
-	HAL_Delay(50);
-
-	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_SET);
-
-	HAL_GPIO_DeInit(GPIOC, GPIO_PIN_12);
-	//
+	disconnect_usb();
 
 	USB_Config();
-
 	printf("USB config done\n");
 
 	ADC_Config();
 	ADC_Start();
-
 	printf("ADC config done\n");
 
-	uint32_t old_time = HAL_GetTick();
+	init_dig_btns();
+	printf("digital buttons init done\n");
+
+	init_led();
 
 	printf("start loop\n");
 
 	while (1) {
-		uint32_t new_time = HAL_GetTick();
+
+		dig_btn_check();
+		led_check_off();
 
 		if (adc_complete) {
+			adc_complete = 0;
+
 #if 0 //def DEBUG_PRINT
 			uint32_t i;
 			for (i = 0; i < ADC_CH_MAX; i++)
 				printf("[%d.%4d]", i, adc_vals[i]);
 			printf("\n");
 #endif
-			old_time = new_time;
-			adc_complete = 0;
 
 			fill_usb_buf(usb_buf);
 
@@ -163,13 +175,14 @@ int main(void)
 				if (usb_send_msg(usb_buf, sizeof(usb_buf)) == 0) {
 					printf("send usb msg\n");
 					memcpy(tmp_usb_buf, usb_buf, sizeof(usb_buf));
+					led_on();
 				}
 			}
 		}
 	}
 }
 
-int32_t check_analog_btn(uint32_t num)
+int32_t get_analog_btn(uint32_t num)
 {
 	uint32_t btn_num = 0;
 	uint32_t i;
@@ -197,9 +210,29 @@ int32_t check_analog_btn(uint32_t num)
 	return -1;
 }
 
+int32_t get_analog_btns_num(void)
+{
+	uint32_t btn_num = 0;
+	uint32_t i;
+	for (i = 0; i < ARRAY_SIZE(analog_btns); i++) {
+		uint32_t j = 0;
+		while (analog_btns[i].n[j] != -1) {
+			j++;
+			btn_num++;
+		}
+	}
+	return btn_num;
+}
+
 uint32_t get_btn(uint32_t num)
 {
-	int32_t val = check_analog_btn(num);
+	int32_t analog_btns_num = get_analog_btns_num();
+	int32_t val = 0;
+	if (num < analog_btns_num)
+		val = get_analog_btn(num);
+	else
+		val = get_dig_btn(num - analog_btns_num);
+
 	if (val == -1)
 		val = 0;
 	return val;
