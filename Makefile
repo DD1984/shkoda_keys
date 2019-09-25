@@ -104,8 +104,9 @@ C_INCLUDES = -I . -I hal -I hal/Inc -I CMSIS/Include -I CMSIS/Device/ST/STM32F1x
 C_INCLUDES += -I STM32_USB_Device_Library/Core/Inc
  
 # compile gcc flags
-ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
+ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -fdata-sections -ffunction-sections
 CFLAGS = $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -fdata-sections -ffunction-sections
+CFLAGS += -Wall -Werror -Wno-missing-braces
 ifeq ($(DEBUG), 1)
 CFLAGS += -g -gdwarf-2
 endif

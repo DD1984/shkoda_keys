@@ -98,7 +98,7 @@ ch_t analog_btns[] = { //num == 18
 
 uint32_t led_on_time = 0;
 
-int init_led(void)
+void init_led(void)
 {
 	GPIO_InitTypeDef  GPIO_InitStruct;
 
@@ -180,6 +180,8 @@ int main(void)
 			}
 		}
 	}
+
+	return 0;
 }
 
 int32_t get_analog_btn(uint32_t num)
