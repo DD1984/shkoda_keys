@@ -2,45 +2,17 @@
   ******************************************************************************
   * @file    USB_Device/HID_Standalone/Src/usbd_conf.c
   * @author  MCD Application Team
-  * @version V1.4.0
-  * @date    29-April-2016
   * @brief   This file implements the USB Device library callbacks and MSP
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright ��� 2016 STMicroelectronics International N.V.
+  * <h2><center>&copy; Copyright (c) 2015 STMicroelectronics.
   * All rights reserved.</center></h2>
   *
-  * Redistribution and use in source and binary forms, with or without 
-  * modification, are permitted, provided that the following conditions are met:
-  *
-  * 1. Redistribution of source code must retain the above copyright notice, 
-  *    this list of conditions and the following disclaimer.
-  * 2. Redistributions in binary form must reproduce the above copyright notice,
-  *    this list of conditions and the following disclaimer in the documentation
-  *    and/or other materials provided with the distribution.
-  * 3. Neither the name of STMicroelectronics nor the names of other 
-  *    contributors to this software may be used to endorse or promote products 
-  *    derived from this software without specific written permission.
-  * 4. This software, including modifications and/or derivative works of this 
-  *    software, must execute solely and exclusively on microcontroller or
-  *    microprocessor devices manufactured by or for STMicroelectronics.
-  * 5. Redistribution and use of this software other than as permitted under 
-  *    this license is void and will automatically terminate your rights under 
-  *    this license. 
-  *
-  * THIS SOFTWARE IS PROVIDED BY STMICROELECTRONICS AND CONTRIBUTORS "AS IS" 
-  * AND ANY EXPRESS, IMPLIED OR STATUTORY WARRANTIES, INCLUDING, BUT NOT 
-  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
-  * PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY INTELLECTUAL PROPERTY
-  * RIGHTS ARE DISCLAIMED TO THE FULLEST EXTENT PERMITTED BY LAW. IN NO EVENT 
-  * SHALL STMICROELECTRONICS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-  * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, 
-  * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-  * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
-  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  * This software component is licensed by ST under Ultimate Liberty license
+  * SLA0044, the "License"; You may not use this file except in compliance with
+  * the License. You may obtain a copy of the License at:
+  *                      www.st.com/SLA0044
   *
   ******************************************************************************
   */
@@ -49,9 +21,10 @@
 #include "stm32f1xx_hal.h"
 #include "usbd_core.h"
 
+
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
-#define USB_DISCONNECT_PORT                 GPIOB  
+#define USB_DISCONNECT_PORT                 GPIOB
 #define USB_DISCONNECT_PIN                  GPIO_PIN_14
 
 /* Private macro -------------------------------------------------------------*/
@@ -75,17 +48,17 @@ static void SystemClockConfig_STOP(void);
 void HAL_PCD_MspInit(PCD_HandleTypeDef *hpcd)
 {
   GPIO_InitTypeDef  GPIO_InitStruct;
-   
+
   /* Enable the GPIOA clock */
   __HAL_RCC_GPIOA_CLK_ENABLE();
-  
+
   /* Configure USB DM/DP pins */
   GPIO_InitStruct.Pin = (GPIO_PIN_11 | GPIO_PIN_12);
   GPIO_InitStruct.Mode = GPIO_MODE_AF_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-  
+
   /* Enable the USB disconnect GPIO clock */
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
@@ -93,24 +66,24 @@ void HAL_PCD_MspInit(PCD_HandleTypeDef *hpcd)
   GPIO_InitStruct.Pin = USB_DISCONNECT_PIN;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
   HAL_GPIO_Init(USB_DISCONNECT_PORT, &GPIO_InitStruct);
-  
+
   /* Enable USB Clock */
   __HAL_RCC_USB_CLK_ENABLE();
-  
+
   if (hpcd->Init.low_power_enable == 1)
   {
     /* Enable EXTI for USB wakeup */
     __HAL_USB_WAKEUP_EXTI_CLEAR_FLAG();
     __HAL_USB_WAKEUP_EXTI_ENABLE_RISING_EDGE();
     __HAL_USB_WAKEUP_EXTI_ENABLE_IT();
-    
+
     /* USB Wakeup Interrupt */
     HAL_NVIC_EnableIRQ(USBWakeUp_IRQn);
-    
+
     /* Enable USB Wake-up interrupt */
     HAL_NVIC_SetPriority(USBWakeUp_IRQn, 0, 0);
   }
-  
+
   /* Set USB Interrupt priority */
   HAL_NVIC_SetPriority(USB_LP_CAN1_RX0_IRQn, 5, 0);
 
@@ -196,7 +169,7 @@ void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
 {
   /* Inform USB library that core enters in suspend Mode */
   USBD_LL_Suspend((USBD_HandleTypeDef*)hpcd->pData);
-  
+
   /* Enter in STOP mode */
   if (hpcd->Init.low_power_enable)
   {
@@ -280,15 +253,14 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev)
   /* Set LL Driver parameters */
   hpcd.Instance = USB;
   hpcd.Init.dev_endpoints = 8;
-  hpcd.Init.ep0_mps = PCD_EP0MPS_64;
   hpcd.Init.phy_itface = PCD_PHY_EMBEDDED;
   hpcd.Init.speed = PCD_SPEED_FULL;
   hpcd.Init.low_power_enable = 0;
-  
+
   /* Link The driver to the stack */
   hpcd.pData = pdev;
   pdev->pData = &hpcd;
-  
+
   /* Initialize LL Driver */
   HAL_PCD_Init((PCD_HandleTypeDef*)pdev->pData);
 
@@ -538,26 +510,26 @@ static void SystemClockConfig_STOP(void)
 {
   RCC_ClkInitTypeDef clkinitstruct = {0};
   RCC_OscInitTypeDef oscinitstruct = {0};
-  
+
   /* Enable HSE Oscillator and activate PLL with HSE as source */
   oscinitstruct.OscillatorType  = RCC_OSCILLATORTYPE_HSE;
   oscinitstruct.HSEState        = RCC_HSE_ON;
   oscinitstruct.HSEPredivValue  = RCC_HSE_PREDIV_DIV1;
   oscinitstruct.PLL.PLLMUL      = RCC_PLL_MUL9;
-  
+
   oscinitstruct.PLL.PLLState    = RCC_PLL_ON;
   oscinitstruct.PLL.PLLSource   = RCC_PLLSOURCE_HSE;
-  
+
   HAL_RCC_OscConfig(&oscinitstruct);
-  
-  /* Select PLL as system clock source and configure the HCLK, PCLK1 and PCLK2 
+
+  /* Select PLL as system clock source and configure the HCLK, PCLK1 and PCLK2
   clocks dividers */
   clkinitstruct.ClockType = (RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2);
   clkinitstruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   clkinitstruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  clkinitstruct.APB1CLKDivider = RCC_HCLK_DIV2;  
+  clkinitstruct.APB1CLKDivider = RCC_HCLK_DIV2;
   clkinitstruct.APB2CLKDivider = RCC_HCLK_DIV1;
-  
+
   HAL_RCC_ClockConfig(&clkinitstruct, FLASH_LATENCY_2);
 }
 

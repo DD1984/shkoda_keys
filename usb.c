@@ -16,11 +16,8 @@ void USB_Config(void)
 
 int usb_send_msg(uint8_t *buf, uint32_t len)
 {
-	USBD_CUSTOM_HID_HandleTypeDef *hhid = (USBD_CUSTOM_HID_HandleTypeDef *)USBD_Device.pClassData;
-	if (hhid->state != CUSTOM_HID_IDLE)
+	if (USBD_CUSTOM_HID_SendReport(&USBD_Device, buf, len) != USBD_OK)
 		return -1;
-
-	USBD_CUSTOM_HID_SendReport(&USBD_Device, buf, len);
 	return 0;
 }
 
