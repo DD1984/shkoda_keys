@@ -10,3 +10,4 @@
 *~
 .dep/
 !generic_boot20_pc13.bin
+!Release/*.bin
