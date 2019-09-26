@@ -14,12 +14,24 @@ void USB_Config(void)
 	USBD_Start(&USBD_Device);
 }
 
+int usb_ready(void)
+{
+	USBD_HandleTypeDef *pdev = &USBD_Device;
+	USBD_CUSTOM_HID_HandleTypeDef *hhid = (USBD_CUSTOM_HID_HandleTypeDef *)pdev->pClassData;
+
+	if (pdev->dev_state == USBD_STATE_CONFIGURED && hhid->state == CUSTOM_HID_IDLE)
+		return 1;
+
+	return 0;
+}
+
 int usb_send_msg(uint8_t *buf, uint32_t len)
 {
 	if (USBD_CUSTOM_HID_SendReport(&USBD_Device, buf, len) != USBD_OK)
 		return -1;
 	return 0;
 }
+
 
 void disconnect_usb(void)
 {

@@ -168,14 +168,35 @@ int main(void)
 			printf("\n");
 #endif
 
-			fill_usb_buf(usb_buf);
+			fill_usb_buf(tmp_usb_buf);
 
 			if (memcmp(usb_buf, tmp_usb_buf, sizeof(usb_buf)) != 0) {
 
-				if (usb_send_msg(usb_buf, sizeof(usb_buf)) == 0) {
-					printf("send usb msg\n");
-					memcpy(tmp_usb_buf, usb_buf, sizeof(usb_buf));
-					led_on();
+				if (usb_ready()) {
+#if 1
+					int nf = 0;
+					for (int i = 0; i < BTNS_NUM; i++) {
+						if ((usb_buf[BTNS_OFFSET + i / 8] & (1 << (i % 8))) != (tmp_usb_buf[BTNS_OFFSET + i / 8] & (1 << (i % 8)))) {
+							printf("[%d]%d ", i, tmp_usb_buf[BTNS_OFFSET + i / 8] & (1 << (i % 8)) ? 1 : 0);
+							nf = 1;
+						}
+					}
+					if (nf)
+						printf("\n");
+#endif
+
+					memcpy(usb_buf, tmp_usb_buf, sizeof(usb_buf));
+
+					printf("send usb msg ... ");
+					if (usb_send_msg(usb_buf, sizeof(usb_buf)) != 0) {
+						memset(usb_buf, 0, sizeof(usb_buf));
+						printf("FAIL");
+					}
+					else {
+						printf("OK");
+						led_on();
+					}
+					printf("\n");
 				}
 			}
 		}

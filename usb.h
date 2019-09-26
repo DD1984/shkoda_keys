@@ -6,6 +6,7 @@
 extern USBD_HandleTypeDef	USBD_Device;
 
 void USB_Config(void);
+int usb_ready(void);
 int usb_send_msg(uint8_t *buf, uint32_t len);
 void disconnect_usb(void);
 
