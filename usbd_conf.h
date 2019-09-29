@@ -56,8 +56,8 @@ extern "C" {
 #define USBD_CUSTOM_HID_REPORT_DESC_SIZE      40
 #define USBD_CUSTOMHID_OUTREPORT_BUF_SIZE     64 // ???
 
-#define CUSTOM_HID_FS_BINTERVAL               0x0AU
-#define CUSTOM_HID_HS_BINTERVAL               0x0AU
+#define CUSTOM_HID_FS_BINTERVAL               0x14U
+#define CUSTOM_HID_HS_BINTERVAL               0x14U
 
 /** @defgroup USBD_Exported_Macros
   * @{

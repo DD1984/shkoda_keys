@@ -6,11 +6,11 @@
 #define ADC_MIN_VAL 0
 #define ADC_CH_MAX 10
 
-extern ADC_HandleTypeDef AdcHandle;
+#define ADC_PERIOD 10 //msec
+
 extern uint16_t adc_vals[ADC_CH_MAX];
-extern volatile uint32_t adc_complete;
 
 void ADC_Config(void);
-void ADC_Start(void);
+int adc_check(void);
 
 #endif

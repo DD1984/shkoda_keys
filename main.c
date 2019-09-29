@@ -55,10 +55,9 @@
 #include "uart.h"
 #include "usb.h"
 #include "dig_btns.h"
+#include "analog_btns.h"
 
 #define DEBUG_PRINT
-
-#define USB_SEND_PERIOD 10 //mSec
 
 #define BTNS_NUM	32
 #define AXES_NUM	1
@@ -66,35 +65,12 @@
 #define BTNS_OFFSET	1
 #define AXES_OFFSET (BTNS_OFFSET + BTNS_NUM / 8)
 
-#define BTN_THRESHOLD	100 // btn +-
-
-#define MAX_ANALOG_BTN_FOR_ADC_CH 10
+#define AXIS_THRESHOLD	100 // axis +-
 
 #define USB_BUF_SIZE (1 + BTNS_NUM / 8 + 2 * AXES_NUM) //1 report id, 1bit - button, 2 bytes - axe
 uint8_t usb_buf[USB_BUF_SIZE];
-uint8_t tmp_usb_buf[USB_BUF_SIZE];
 
 void fill_usb_buf(uint8_t *buf);
-
-typedef struct {
-	int32_t n[MAX_ANALOG_BTN_FOR_ADC_CH];
-} ch_t;
-
-// 4.7к на землю
-ch_t analog_btns[] = { //num == 18
-	//правый, желтый - 3.3в
-	{2760, 3560 ,-1},	//поворотники					- красный нижний
-	{4095, -1},			//дальний включить - зеленый нижний
-	{4095, -1},			//дальний мигнуть - белый нижний (светлосерый)
-	{3570, 2800 ,-1},	//кнопки вверх/низ - зеленый (фиолетовый)
-	{2760, 3560, -1},	//полукруглый переключатель - красный-верхний (светлокрасный)
-	//левый, белый + желтый - 3.3в
-	{2535, 3165, 3610, 3895, -1}, //верх-низ - синий
-	{3825, 3360, 2665, -1}, // вперед-назад - зеленый
-	{3825, 2670, 3370, -1} // кнопки - красный
-	//черный ось - а7
-};
-
 
 uint32_t led_on_time = 0;
 
@@ -122,6 +98,11 @@ void led_check_off(void)
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 }
 
+int adc_check(void);
+void usb_check(void);
+
+int adc_cnt = 0;
+
 int main(void)
 {
 	SCB->VTOR = FLASH_BASE | 0x2000; //vector table
@@ -143,8 +124,10 @@ int main(void)
 	printf("USB config done\n");
 
 	ADC_Config();
-	ADC_Start();
 	printf("ADC config done\n");
+
+	init_analog_btns();
+	printf("analog buttons init done\n");
 
 	init_dig_btns();
 	printf("digital buttons init done\n");
@@ -155,96 +138,48 @@ int main(void)
 
 	while (1) {
 
-		dig_btn_check();
-		led_check_off();
-
-		if (adc_complete) {
-			adc_complete = 0;
-
-#if 0 //def DEBUG_PRINT
-			uint32_t i;
+		if (adc_check() == 0) {
+#if 0
+			int i;
 			for (i = 0; i < ADC_CH_MAX; i++)
 				printf("[%d.%4d]", i, adc_vals[i]);
 			printf("\n");
 #endif
 
-			fill_usb_buf(tmp_usb_buf);
-
-			if (memcmp(usb_buf, tmp_usb_buf, sizeof(usb_buf)) != 0) {
-
-				if (usb_ready()) {
-#if 1
-					int nf = 0;
-					for (int i = 0; i < BTNS_NUM; i++) {
-						if ((usb_buf[BTNS_OFFSET + i / 8] & (1 << (i % 8))) != (tmp_usb_buf[BTNS_OFFSET + i / 8] & (1 << (i % 8)))) {
-							printf("[%d]%d ", i, tmp_usb_buf[BTNS_OFFSET + i / 8] & (1 << (i % 8)) ? 1 : 0);
-							nf = 1;
-						}
-					}
-					if (nf)
-						printf("\n");
-#endif
-
-					memcpy(usb_buf, tmp_usb_buf, sizeof(usb_buf));
-
-					printf("send usb msg ... ");
-					if (usb_send_msg(usb_buf, sizeof(usb_buf)) != 0) {
-						memset(usb_buf, 0, sizeof(usb_buf));
-						printf("FAIL");
-					}
-					else {
-						printf("OK");
-						led_on();
-					}
-					printf("\n");
-				}
-			}
+			analog_btn_check();
 		}
+
+		dig_btn_check();
+
+		led_check_off();
+
+		usb_check();
 	}
 
 	return 0;
 }
 
-int32_t get_analog_btn(uint32_t num)
+void usb_check(void)
 {
-	uint32_t btn_num = 0;
-	uint32_t i;
-	for (i = 0; i < ARRAY_SIZE(analog_btns); i++) {
-		uint32_t j = 0;
-		while (analog_btns[i].n[j] != -1) {
-			if (num == btn_num) {
-				int32_t min = analog_btns[i].n[j] - BTN_THRESHOLD;
-				if (min < ADC_MIN_VAL)
-					min = ADC_MIN_VAL;
-				int32_t max = analog_btns[i].n[j] + BTN_THRESHOLD;
-				if (max > ADC_MAX_VAL)
-					max = ADC_MAX_VAL;
-				if (min <= adc_vals[i] && max >= adc_vals[i]) {
-					return 1;
-				}
-				else {
-					return 0;
-				}
-			}
-			j++;
-			btn_num++;
-		}
-	}
-	return -1;
-}
+	uint8_t tmp_usb_buf[USB_BUF_SIZE];
 
-int32_t get_analog_btns_num(void)
-{
-	uint32_t btn_num = 0;
-	uint32_t i;
-	for (i = 0; i < ARRAY_SIZE(analog_btns); i++) {
-		uint32_t j = 0;
-		while (analog_btns[i].n[j] != -1) {
-			j++;
-			btn_num++;
-		}
-	}
-	return btn_num;
+	if (!usb_ready())
+		return;
+
+	fill_usb_buf(tmp_usb_buf);
+
+	if (!memcmp(usb_buf, tmp_usb_buf, sizeof(usb_buf)))
+		return;
+
+	memcpy(usb_buf, tmp_usb_buf, sizeof(usb_buf));
+
+	int ret = usb_send_msg(usb_buf, sizeof(usb_buf));
+	if (ret != 0)
+		memset(usb_buf, 0, sizeof(usb_buf));
+	else
+		led_on();
+
+	printf("send usb msg ... %s\n", ret ? "FAIL" : "OK");
 }
 
 uint32_t get_btn(uint32_t num)
@@ -266,10 +201,10 @@ uint32_t get_axis(uint32_t num)
 	uint16_t arr[] = {2335, 3160, 3605, 3890};
 	uint32_t i;
 	for (i = 0; i < ARRAY_SIZE(arr); i++) {
-		int32_t min = arr[i] - BTN_THRESHOLD;
+		int32_t min = arr[i] - AXIS_THRESHOLD;
 		if (min < ADC_MIN_VAL)
 			min = ADC_MIN_VAL;
-		int32_t max = arr[i] + BTN_THRESHOLD;
+		int32_t max = arr[i] + AXIS_THRESHOLD;
 		if (max > ADC_MAX_VAL)
 			max = ADC_MAX_VAL;
 		if (min <= adc_vals[8] && max >= adc_vals[8]) {

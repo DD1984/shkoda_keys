@@ -2,8 +2,14 @@
 #include "stm32f1xx_hal.h"
 #include "adc.h"
 
+typedef enum {
+	ADC_STOPED,
+	ADC_RUN,
+	ADC_COMPLETE,
+} adc_status_t;
+
 uint16_t adc_vals[ADC_CH_MAX];
-volatile uint32_t adc_complete = 1;
+volatile int adc_status = ADC_STOPED;
 
 static __IO uint16_t adc_dma_buf[ADC_CH_MAX];
 ADC_HandleTypeDef	AdcHandle;
@@ -17,7 +23,7 @@ void ADC_Config(void)
 	AdcHandle.Init.DataAlign             = ADC_DATAALIGN_RIGHT;
 	AdcHandle.Init.ScanConvMode          = ADC_SCAN_ENABLE;
 
-	AdcHandle.Init.ContinuousConvMode    = ENABLE;                        /* Continuous mode to have maximum conversion speed (no delay between conversions) */
+	AdcHandle.Init.ContinuousConvMode    = DISABLE;
 	AdcHandle.Init.NbrOfConversion       = ADC_CH_MAX;
 	AdcHandle.Init.DiscontinuousConvMode = DISABLE;
 	AdcHandle.Init.NbrOfDiscConversion   = 0;
@@ -82,11 +88,17 @@ void ADC_Config(void)
 	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 	HAL_ADCEx_Calibration_Start(&AdcHandle);
 
+	memset(adc_vals, 0, sizeof(adc_vals));
 }
 
 void ADC_Start(void)
 {
+	if (adc_status != ADC_STOPED)
+		return;
+
 	HAL_ADC_Start_DMA(&AdcHandle, (uint32_t *)adc_dma_buf, ADC_CH_MAX);
+
+	adc_status = ADC_RUN;
 }
 
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
@@ -97,5 +109,40 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
 	memcpy(&adc_vals[ADC_CH_MAX / 2], (void *)(&adc_dma_buf[ADC_CH_MAX / 2]), (ADC_CH_MAX / 2) * sizeof(adc_dma_buf[0]));
-	adc_complete = 1;
+	adc_status = ADC_COMPLETE;
+}
+
+int is_adc_complite(void)
+{
+	int ret = (adc_status == ADC_COMPLETE) ? 1 : 0;
+	if (ret)
+		adc_status = ADC_STOPED;
+
+	return ret;
+}
+
+int is_adc_stoped(void)
+{
+	return (adc_status == ADC_STOPED) ? 1 : 0;
+}
+
+int adc_check(void)
+{
+	if (is_adc_stoped()) {
+		static uint32_t old_time = 0;
+		uint32_t new_time = HAL_GetTick();
+
+		if (new_time - old_time < ADC_PERIOD)
+			return -1;
+
+		old_time = new_time;
+
+		ADC_Start();
+		return -1;
+	}
+
+	if (!is_adc_complite())
+		return -1;
+
+	return 0;
 }

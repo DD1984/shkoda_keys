@@ -1,17 +1,19 @@
+#include <stdio.h>
 #include <string.h>
 
 #include "stm32f1xx_hal.h"
 
 #include "defs.h"
 
-#define DIG_BTN_DELAY 20
+#define DIG_BTN_PERIOD 1
+#define DIG_BTN_JITTER	5
 
 typedef struct {
 	GPIO_TypeDef* GPIOx;
 	uint16_t GPIO_Pin;
-} dig_btn_t;
+} dig_btn_decs_t;
 
-dig_btn_t dig_btns[] = {
+dig_btn_decs_t dig_btns[] = {
 	{GPIOB, GPIO_PIN_9},
 	{GPIOB, GPIO_PIN_8},
 	{GPIOB, GPIO_PIN_7},
@@ -26,7 +28,12 @@ dig_btn_t dig_btns[] = {
 	{GPIOB, GPIO_PIN_12},
 };
 
-uint8_t dig_btns_state[ARRAY_SIZE(dig_btns)];
+typedef struct {
+	uint8_t cnt;
+	uint8_t state;
+} dig_btn_t;
+
+dig_btn_t dig_btns_state[ARRAY_SIZE(dig_btns)];
 
 void init_dig_btns(void)
 {
@@ -55,9 +62,25 @@ void dig_btn_check(void)
 {
 	static uint32_t old_time = 0;
 	uint32_t new_time = HAL_GetTick();
-	
-	if (new_time - old_time > DIG_BTN_DELAY) {
-		read_dig_btns(dig_btns_state);
+
+	if (new_time - old_time > DIG_BTN_PERIOD) {
+		for (int i = 0; i < ARRAY_SIZE(dig_btns); i++) {
+
+			if (!HAL_GPIO_ReadPin(dig_btns[i].GPIOx, dig_btns[i].GPIO_Pin)) {
+				if (dig_btns_state[i].cnt < DIG_BTN_JITTER)
+					dig_btns_state[i].cnt++;
+				if (dig_btns_state[i].cnt == DIG_BTN_JITTER)
+					dig_btns_state[i].state = 1;
+			}
+			else {
+				if (dig_btns_state[i].cnt != 0)
+					dig_btns_state[i].cnt--;
+				if (dig_btns_state[i].cnt == 0)
+					dig_btns_state[i].state = 0;
+			}
+		}
+
+		old_time = new_time;
 	}
 }
 
@@ -65,5 +88,5 @@ int32_t get_dig_btn(uint32_t num)
 {
 	if (num >= ARRAY_SIZE(dig_btns))
 		return -1;
-	return dig_btns_state[num];
+	return dig_btns_state[num].state;
 }
